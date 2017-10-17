@@ -1,4 +1,5 @@
 // Pez was developed by Philip Rideout and released under the MIT License.
+#ifdef VKFLUID_LINUX
 
 #include <GL/glx.h>
 
@@ -29,6 +30,7 @@ unsigned int GetMicroseconds()
     return tp.tv_sec * 1000000 + tp.tv_usec;
 }
 
+#if 0
 int main(int argc, char** argv)
 {
     int attrib[] = {
@@ -249,6 +251,7 @@ int main(int argc, char** argv)
 
     return 0;
 }
+#endif
 
 void pezPrintStringW(const wchar_t* pStr, ...)
 {
@@ -334,3 +337,6 @@ const char* pezResourcePath()
 {
     return ".";
 }
+
+#endif//VKFLUID_LINUX
+

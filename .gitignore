@@ -1,0 +1,16 @@
+Fluid
+*.o
+vk[Ff]luid
+build/
+.build/
+Debug
+Release
+RelWithDebInfo
+ThirdParty/glew
+ThirdParty/glfw3
+ThirdParty/glfw
+
+
+
+
+

@@ -1,12 +1,76 @@
+//#define GL3_PROTOTYPES
+//#include "gl3.h"
+
+
+#include <GL/glew.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+
+//#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
+#include "pez.h"
+#include "bstrlib.h"
+
 #include "Utility.h"
-#include <cmath>
-#include <cstdio>
+
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 using namespace vmath;
-using std::string;
 
-#define OpenGLError GL_NO_ERROR == glGetError(),                        \
-        "%s:%d - OpenGL Error - %s", __FILE__, __LINE__, __FUNCTION__   \
+typedef enum RendererTypeEnum 
+{
+    Renderer_OPENGL,
+    Renderer_VULKAN,
+} RendererTypeEnum;
+
+
+typedef struct ContextRec 
+{
+    GLFWwindow *MainWindow;
+    RendererTypeEnum RendererType;
+
+    struct {
+        float X, Y;
+        int Buttons[GLFW_MOUSE_BUTTON_LAST];
+    } MouseState;
+
+    struct {
+        double StartTime;
+        unsigned FrameCount;
+        float FramesPerSecond;
+    } FrameStats;
+
+    bool WindowWasResized;
+    bool StopRequested;
+} Context;
+
+static Context global_context = {};
+
+typedef void(*render_init_func)(void);
+typedef void(*update_func)(float dtseconds);
+typedef void(*render_func)(void);
+typedef void(*finalize_frame_func)(void);
+
+typedef struct Renderer
+{
+    render_init_func    Init;
+    render_func         Render;
+    update_func         Update;
+    finalize_frame_func FinalizeFrame;
+} Renderer;
+
+
+#ifdef _MSC_VER
+//#define OpenGLError (GL_NO_ERROR == glGetError()), "%s:%d - OpenGL Error - %s", __FILE__, __LINE__, __FUNC__   
+static GLenum _errorCode;
+#define OpenGLError ((_errorCode = glGetError()) == GL_NO_ERROR), "%s:%d OpenGL Error : %s", __FILE__, __LINE__, gluErrorString(_errorCode)
+#else
+#define OpenGLError GL_NO_ERROR == glGetError(), "%s:%d - OpenGL Error - %s", __FILE__, __LINE__, __FUNCTION__   
+#endif
 
 static struct {
     SlabPod Velocity;
@@ -100,7 +164,7 @@ void PezInitialize()
     pezCheck(OpenGLError);
 }
 
-void PezRender()
+void PezRenderOpenGL()
 {
     pezCheck(OpenGLError);
     PezConfig cfg = PezGetConfig();
@@ -160,7 +224,7 @@ void PezRender()
     SetUniform("Density", 0);
     SetUniform("LightCache", 1);
     SetUniform("RayOrigin", Vector4(transpose(Matrices.Modelview) * EyePosition).getXYZ());
-    SetUniform("FocalLength", 1.0f / std::tan(FieldOfView / 2));
+    SetUniform("FocalLength", 1.0f / tanf(FieldOfView / 2.0f));
     SetUniform("WindowSize", float(cfg.Width), float(cfg.Height));
     SetUniform("StepSize", sqrtf(2.0) / float(ViewSamples));
     glDrawArrays(GL_POINTS, 0, 1);
@@ -238,9 +302,222 @@ void PezHandleMouse(int x, int y, int action)
     }
 }
 
-void PezHandleKey(char c)
-{
-    if (c == ' ') {
-        SimulateFluid = !SimulateFluid;
+static void HandleErrorGLFW(int code, const char *errordesc) {
+    printf("GLFW error %d : %s\n", code, errordesc);
+    assert(false);
+    exit(EXIT_FAILURE);
+}
+
+static void HandleKeyInputGLFW(GLFWwindow *window, int key, int scancode, int action, int modifierFlags) {
+    Context *ctx = &global_context;
+    if(action == GLFW_RELEASE) {
+        switch(key) {
+            case GLFW_KEY_ESCAPE:
+                ctx->StopRequested = true;
+                break;
+
+            case GLFW_KEY_P:
+            case GLFW_KEY_SPACE:
+                SimulateFluid = !SimulateFluid;
+                break;
+
+            default:
+                break;
+        }
+    }
+    // handle key press stuff???
+}
+
+static void HandleMouseMoveGLFW(GLFWwindow *window, double px, double py) {
+    Context *ctx = &global_context;
+    ctx->MouseState.X = (float)px;
+    ctx->MouseState.Y = (float)py;
+    //printf("Mouse moved to %f x %f\n", px, py);
+    PezHandleMouse((int)ctx->MouseState.X, (int)ctx->MouseState.Y, PEZ_MOVE);
+}
+
+static void HandleMouseButtonInputGLFW(GLFWwindow *window, int button, int action, int modifiers) {
+    Context *ctx = &global_context;
+    //printf("Mouse button '%d' is %s at %f x %f\n", button, 
+            //((action == GLFW_PRESS) ? "DOWN" : "UP"),
+            //ctx->MouseState.X, ctx->MouseState.Y);
+
+    int pezMouseAction = 0;
+    if(action == GLFW_PRESS) {
+        pezMouseAction = PEZ_DOWN;
+    } else if(action == GLFW_RELEASE) {
+        pezMouseAction = PEZ_UP;
+    }
+
+    PezHandleMouse((int)ctx->MouseState.X, (int)ctx->MouseState.Y, pezMouseAction);
+}
+
+static void HandleWindowResizeGLFW(GLFWwindow *window, int width, int height) {
+    Context *ctx = &global_context;
+    printf("Main window resized to %d x %d\n", width, height);
+    ctx->WindowWasResized = true;
+}
+
+
+static void HandleCursorEnterGLFW(GLFWwindow *window, int entered) {
+    Context *ctx = &global_context;
+    if(entered) {
+        printf("Mouse ENTERED!\n");
+    } else {
+        // release mouse
+        printf("Mouse EXITED!\n");
     }
 }
+
+static void InitRendererOpenGL(void) {
+    Context *ctx = &global_context;
+
+    // make the context "current"
+    glfwMakeContextCurrent(ctx->MainWindow);
+
+    // clear any opengl error state
+    glGetError();
+
+    // Initialize GLEW - the OpenGL Extension Wrangler
+    glewExperimental = GL_TRUE;
+    GLenum result = glewInit();
+    if (result != GLEW_OK) {
+        printf("ERROR: Failed to initialize GLEW: %s\n", glewGetErrorString(result));
+        exit(EXIT_FAILURE);
+    }
+
+    // clear any opengl error state
+    glGetError();
+
+    // Init shader library
+    bstring name = bfromcstr(PezGetConfig().Title);
+    pezSwInit("");
+
+    pezSwAddPath("./", ".glsl");
+    pezSwAddPath("../", ".glsl");
+
+    char qualified_path[128];
+    strcpy(qualified_path, pezResourcePath());
+    strcpy(qualified_path, "/");
+    pezSwAddPath(qualified_path, ".glsl");
+    pezSwAddDirective("*", "#version 400");
+
+    pezPrintString("OpenGL Version:  %s\n", glGetString(GL_VERSION));
+
+    PezInitialize();
+
+    glfwSwapInterval(0);
+}
+
+
+static void FinalizeFrameOpenGL(void) {
+    Context *ctx = &global_context;
+    glfwSwapBuffers(ctx->MainWindow);
+}
+
+
+int main(int argc, char *argv[]) {
+    glfwSetErrorCallback(HandleErrorGLFW);
+
+    Context *ctx = &global_context;
+
+    if(!glfwInit()) {
+        printf("Failed to initialize GLFW\n");
+        return(EXIT_FAILURE);
+    }
+
+    GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode *vidmode = glfwGetVideoMode(monitor);
+    printf("Current video mode : %dx%d @ %d Hz\n", vidmode->width, vidmode->height, vidmode->refreshRate);
+
+    if(ctx->RendererType == Renderer_VULKAN) {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    } else if(ctx->RendererType == Renderer_OPENGL) {
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+
+        // Nothing in this code prevents using a core profile, but note that the shaders require a 4.0+ context
+        //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+
+        if(PezGetConfig().Multisampling) {
+            glfwWindowHint(GLFW_SAMPLES, 4);
+        }
+    } else {
+        printf("ERROR - Unknown renderer type : %d\n", ctx->RendererType);
+        assert(false);
+        return(EXIT_FAILURE);
+    }
+
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
+
+    do {
+        ctx->MainWindow = glfwCreateWindow(PezGetConfig().Width, PezGetConfig().Height, "vkFluid", NULL, NULL);
+        if(!ctx->MainWindow) {
+            printf("Failed to create GLFW window!\n");
+            return(EXIT_FAILURE);
+        }
+
+        glfwSetKeyCallback(ctx->MainWindow, HandleKeyInputGLFW);
+
+        glfwSetCursorEnterCallback(ctx->MainWindow, HandleCursorEnterGLFW);
+        glfwSetMouseButtonCallback(ctx->MainWindow, HandleMouseButtonInputGLFW);
+        glfwSetCursorPosCallback(ctx->MainWindow, HandleMouseMoveGLFW);
+
+        glfwSetWindowSizeCallback(ctx->MainWindow, HandleWindowResizeGLFW);
+
+        Renderer renderer = {};
+        if(ctx->RendererType == Renderer_OPENGL) {
+            renderer.Init = InitRendererOpenGL;
+            renderer.Update = PezUpdate;
+            renderer.Render = PezRenderOpenGL;
+            renderer.FinalizeFrame = FinalizeFrameOpenGL;
+        } else if (ctx->RendererType == Renderer_VULKAN) {
+            // TODO(BH): Vulkan renderer stuff...
+            //renderer.Init = InitRendererVulkan;
+            //renderer.Update = UpdateVulkan;
+            //renderer.Render = RenderVulkan;
+            //renderer.FinalizeFrame = FinalizeFrameVulkan;
+            printf("ERROR: Vulkan renderer not yet implemented!\n");
+            assert(false);
+        } else {
+            printf("ERROR: Unknown renderer type '%d'\n", ctx->RendererType);
+            assert(false);
+        }
+
+        renderer.Init();
+
+        double PrevTime = glfwGetTime();
+        ctx->FrameStats.StartTime = PrevTime;
+        ctx->StopRequested = false;
+        while(!ctx->StopRequested && !glfwWindowShouldClose(ctx->MainWindow)) {
+            glfwPollEvents();
+
+            double CurrentTime = glfwGetTime();
+            double DeltaTime = CurrentTime - PrevTime;
+            PrevTime = CurrentTime;
+
+            renderer.Update((float)DeltaTime);
+
+            renderer.Render();
+            renderer.FinalizeFrame();
+
+            if(++ctx->FrameStats.FrameCount > 100) {
+                ctx->FrameStats.FramesPerSecond = (float)ctx->FrameStats.FrameCount / (CurrentTime - ctx->FrameStats.StartTime);
+                ctx->FrameStats.FrameCount = 0;
+                ctx->FrameStats.StartTime = CurrentTime;
+                printf("FPS last 100 frames: %0.3f\n", ctx->FrameStats.FramesPerSecond);
+            }
+        }
+
+        pezSwShutdown();
+        glfwTerminate();
+
+    } while(false);
+
+    return(EXIT_SUCCESS);
+}
+
