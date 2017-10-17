@@ -1,4 +1,12 @@
 Fluid
 *.o
+vk[Ff]luid
+build/
+.build/
+Debug
+Release
+RelWithDebInfo
+
+
 
 

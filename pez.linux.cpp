@@ -29,6 +29,7 @@ unsigned int GetMicroseconds()
     return tp.tv_sec * 1000000 + tp.tv_usec;
 }
 
+#if 0
 int main(int argc, char** argv)
 {
     int attrib[] = {
@@ -249,6 +250,7 @@ int main(int argc, char** argv)
 
     return 0;
 }
+#endif
 
 void pezPrintStringW(const wchar_t* pStr, ...)
 {
@@ -334,3 +336,4 @@ const char* pezResourcePath()
 {
     return ".";
 }
+
