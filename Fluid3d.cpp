@@ -361,7 +361,7 @@ static void HandleWindowResizeGLFW(GLFWwindow *window, int width, int height) {
 
 static void HandleCursorEnterGLFW(GLFWwindow *window, int entered) {
     Context *ctx = &global_context;
-    if(entered == GLFW_TRUE) {
+    if(entered) {
         printf("Mouse ENTERED!\n");
     } else {
         // release mouse
@@ -385,6 +385,9 @@ static void InitRendererOpenGL(void) {
         printf("ERROR: Failed to initialize GLEW: %s\n", glewGetErrorString(result));
         exit(EXIT_FAILURE);
     }
+
+    // clear any opengl error state
+    glGetError();
 
     // Init shader library
     bstring name = bfromcstr(PezGetConfig().Title);
