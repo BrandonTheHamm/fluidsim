@@ -1,7 +1,12 @@
-#define GL3_PROTOTYPES
-#include "gl3.h"
+//#define GL3_PROTOTYPES
+//#include "gl3.h"
 
-#define GLFW_INCLUDE_VULKAN
+
+#include <GL/glew.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+
+//#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include "pez.h"
@@ -59,8 +64,13 @@ typedef struct Renderer
 } Renderer;
 
 
-#define OpenGLError GL_NO_ERROR == glGetError(),                        \
-        "%s:%d - OpenGL Error - %s", __FILE__, __LINE__, __FUNCTION__   \
+#ifdef _MSC_VER
+//#define OpenGLError (GL_NO_ERROR == glGetError()), "%s:%d - OpenGL Error - %s", __FILE__, __LINE__, __FUNC__   
+static GLenum _errorCode;
+#define OpenGLError ((_errorCode = glGetError()) == GL_NO_ERROR), "%s:%d OpenGL Error : %s", __FILE__, __LINE__, gluErrorString(_errorCode)
+#else
+#define OpenGLError GL_NO_ERROR == glGetError(), "%s:%d - OpenGL Error - %s", __FILE__, __LINE__, __FUNCTION__   
+#endif
 
 static struct {
     SlabPod Velocity;
@@ -364,8 +374,17 @@ static void InitRendererOpenGL(void) {
 
     // make the context "current"
     glfwMakeContextCurrent(ctx->MainWindow);
+
     // clear any opengl error state
     glGetError();
+
+    // Initialize GLEW - the OpenGL Extension Wrangler
+    glewExperimental = GL_TRUE;
+    GLenum result = glewInit();
+    if (result != GLEW_OK) {
+        printf("ERROR: Failed to initialize GLEW: %s\n", glewGetErrorString(result));
+        exit(EXIT_FAILURE);
+    }
 
     // Init shader library
     bstring name = bfromcstr(PezGetConfig().Title);

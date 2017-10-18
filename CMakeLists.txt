@@ -7,7 +7,7 @@ endif(POLICY CMP0015)
 project (vkfluid)
 set(PROGRAM_NAME vkfluid)
 
-set(THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/external")
+set(THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/ThirdParty")
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMakeModules;${CMAKE_MODULE_PATH}")
 include(BHutils)
@@ -24,7 +24,7 @@ ADD_DEFINITIONS(-DVKFLUID_DEBUG)
 
 message(STATUS "GLFW3_DIR = ${GLFW3_DIR}")
 OPTION(GLFW3_USE_STATIC "Set to ON to use GLFW static libs" OFF)
-#SET(GLFW3_USE_STATIC YES)
+SET(GLFW3_USE_STATIC YES)
 find_package(GLFW3 REQUIRED)
 IF(GLFW3_USE_STATIC)
 	ADD_DEFINITIONS(-DGLFW3_USE_STATIC)
@@ -38,13 +38,15 @@ file(GLOB VKFLUID_HEADERS *.h *.inl *.hpp *.hxx *.hh)
 file(GLOB VKFLUID_SOURCES *.cpp *.c *.cc *.cxx)
 
 IF(WIN32)
+  add_definitions(-DVKFLUID_WIN32)
   ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS)
   ADD_DEFINITIONS(-D_CRT_SECURE_NO_DEPRECATE)
   ADD_DEFINITIONS(-D_WINDOWS)
   ADD_DEFINITIONS(-D_WIN32)
   ADD_DEFINITIONS(-DGLFW_EXPOSE_NATIVE_WIN32)
-  ADD_DEFINITIONS(/wd4710)
-  ADD_DEFINITIONS(/wd4191)
+
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd47190 /wd4191")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
 
   # OPTION(MSVC_USE_STATIC_RUNTIME "Use the static C runtime library" OFF)
   # if(MSVC_USE_STATIC_RUNTIME)
@@ -74,14 +76,20 @@ IF(WIN32)
       ENDFOREACH()
   endif()
 
+  if(CMAKE_CXX_FLAGS MATCHES "/GR ")
+    string(REPLACE "/GR" "/GR-" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    message(STATUS "CMAKE_CXX_FLAGS matches /GR before end of string -- replaced...")
+    message(STATUS "")
+  endif()
+
   if(CMAKE_CXX_FLAGS MATCHES "/EHsc ")
-    string(REPLACE "/EHsc" "/EHs-c-" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REPLACE "/EHsc" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     message(STATUS "CMAKE_CXX_FLAGS matches /EHsc before end of string -- replaced...")
     message(STATUS "")
   endif()
 
   if(CMAKE_CXX_FLAGS MATCHES "/EHsc$")
-    string(REPLACE "/EHsc" "/EHs-c-" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REPLACE "/EHsc" " " CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
     message(STATUS "CMAKE_CXX_FLAGS matches /EHsc at end of string -- replaced...")
     message(STATUS "")
   endif()
@@ -95,9 +103,12 @@ IF(WIN32)
 elseif(UNIX AND NOT APPLE)
   SET(EXECUTABLE_FLAGS "")
   SET(PLATFORM_LIBRARIES "")
-  ADD_DEFINITIONS(-Wno-missing-field-initializers)
-  ADD_DEFINITIONS(-Wno-missing-braces)
+  add_definitions(-DVKFLUID_LINUX)
+  # ADD_DEFINITIONS(-Wno-missing-field-initializers)
+  # ADD_DEFINITIONS(-Wno-missing-braces)
 
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-braces")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
   
@@ -116,6 +127,22 @@ IF(${OPENGL_FOUND} MATCHES "TRUE")
     INCLUDE_DIRECTORIES(${OPENGL_INCLUDE_DIR})
     message(STATUS "OPENGL_INCLUDE_DIR = ${OPENGL_INCLUDE_DIR}")
 ENDIF()
+
+
+OPTION(GLEW_USE_STATIC "Set to ON to use GLEW static libs" OFF)
+if(WIN32)
+  SET(GLEW_DIR "${THIRDPARTY_DIR}/glew/msvc2015-win64")
+  set(GLEW_USE_STATIC YES)
+else(UNIX AND NOT APPLE)
+   #set(GLEW_USE_STATIC NO)
+endif()
+message(STATUS "GLEW_DIR = ${GLEW_DIR}")
+find_package(GLEW REQUIRED)
+include_directories(${GLEW_INCLUDE_DIR})
+list(APPEND Invaders_LIBRARIES "${GLEW_LIBRARY}")
+message(STATUS "GLEW_INCLUDE_DIR = ${GLEW_INCLUDE_DIR}")
+message(STATUS "GLEW_LIBRARY = ${GLEW_LIBRARY}")
+
 
 # Use FindVulkan module added with CMAKE 3.7
 # if (NOT CMAKE_VERSION VERSION_LESS 3.7.0)
@@ -155,7 +182,8 @@ add_executable(${PROGRAM_NAME} ${EXECUTABLE_FLAGS}
 
 target_link_libraries(${PROGRAM_NAME}
 	${GLFW3_LIBRARY}
-  	${OPENGL_LIBRARY}
+	${OPENGL_LIBRARY}
+  ${GLEW_LIBRARY}
 	${Vulkan_LIBRARY}
 )
 

@@ -1,9 +1,16 @@
 #pragma once
+
+#include <GL/glew.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+
 #include <vector>
 #include <string>
 #include "vmath.hpp"
 #include "pez.h"
-#include "gl3.h"
+
+
+//#include "gl3.h"
 
 enum AttributeSlot {
     SlotPosition,

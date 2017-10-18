@@ -1,0 +1,12 @@
+When building for Windows, you can drop the following into ThirdParty directory to get automatically picked up by CMake:
+
+ThirdParty/glew/msvc2016-win64/include/glew/..
+ThirdParty/glew/msvc2016-win64/lib/... (static glew libs)
+
+ThirdParty/glfw3/msvc2016-win64/include/glfw/..
+ThirdParty/glfw3/msvc2016-win64/lib/... (static glfw libs)
+
+Obviously, if building with a different compiler or architecture, this won't work and you'll have to manually
+point CMake at your glew and glfw distributions when running CMake.
+
+

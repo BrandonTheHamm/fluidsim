@@ -1,4 +1,5 @@
 // Pez was developed by Philip Rideout and released under the MIT License.
+#ifdef VKFLUID_LINUX
 
 #include <GL/glx.h>
 
@@ -336,4 +337,6 @@ const char* pezResourcePath()
 {
     return ".";
 }
+
+#endif//VKFLUID_LINUX
 
