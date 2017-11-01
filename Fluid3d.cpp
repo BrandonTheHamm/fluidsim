@@ -1,7 +1,3 @@
-//#define GL3_PROTOTYPES
-//#include "gl3.h"
-
-
 #include <GL/glew.h>
 #include <GL/gl.h>
 #include <GL/glu.h>

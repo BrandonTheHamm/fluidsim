@@ -261,6 +261,8 @@ void pezPrintStringW(const wchar_t* pStr, ...)
     wchar_t msg[1024] = {0};
     vswprintf(msg, countof(msg), pStr, a);
     fputws(msg, stderr);
+
+    va_end(a);
 }
 
 void pezPrintString(const char* pStr, ...)
