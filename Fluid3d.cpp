@@ -21,17 +21,17 @@
 
 using namespace vmath;
 
-typedef enum RendererTypeEnum 
+typedef enum render_type_t 
 {
     Renderer_OPENGL,
     Renderer_VULKAN,
-} RendererTypeEnum;
+} render_type_t;
 
 
 typedef struct ContextRec 
 {
     GLFWwindow *MainWindow;
-    RendererTypeEnum RendererType;
+    render_type_t RendererType;
 
     struct {
         float X, Y;
@@ -46,22 +46,22 @@ typedef struct ContextRec
 
     bool WindowWasResized;
     bool StopRequested;
-} Context;
+} context_t;
 
-static Context global_context = {};
+static context_t GlobalContext = {};
 
-typedef void(*render_init_func)(void);
-typedef void(*update_func)(float dtseconds);
-typedef void(*render_func)(void);
-typedef void(*finalize_frame_func)(void);
+typedef void(*render_init_func_t)(void);
+typedef void(*update_func_t)(float dtseconds);
+typedef void(*render_func_t)(void);
+typedef void(*finalize_frame_func_t)(void);
 
-typedef struct Renderer
+typedef struct
 {
-    render_init_func    Init;
-    render_func         Render;
-    update_func         Update;
-    finalize_frame_func FinalizeFrame;
-} Renderer;
+    render_init_func_t    Initialize;
+    render_func_t         RenderFrame;
+    update_func_t         Update;
+    finalize_frame_func_t FinishFrame;
+} renderer_t;
 
 
 #ifdef _MSC_VER
@@ -112,8 +112,7 @@ static int ViewSamples = GridWidth*2;
 static int LightSamples = GridWidth;
 static float Fips = -4;
 
-PezConfig PezGetConfig()
-{
+PezConfig PezGetConfig() {
     PezConfig config;
     config.Title = "Fluid3d";
     config.Width = 853*2;
@@ -123,26 +122,24 @@ PezConfig PezGetConfig()
     return config;
 }
 
-void PezInitialize()
-{
+void PezInitialize() {
     PezConfig cfg = PezGetConfig();
-
     RaycastProgram = LoadProgram("Raycast.VS", "Raycast.GS", "Raycast.FS");
     LightProgram = LoadProgram("Fluid.Vertex", "Fluid.PickLayer", "Light.Cache");
     BlurProgram = LoadProgram("Fluid.Vertex", "Fluid.PickLayer", "Light.Blur");
 
     glGenVertexArrays(1, &Vaos.CubeCenter);
     glBindVertexArray(Vaos.CubeCenter);
+
     CreatePointVbo(0, 0, 0);
     glEnableVertexAttribArray(SlotPosition);
     glVertexAttribPointer(SlotPosition, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
-
     glGenVertexArrays(1, &Vaos.FullscreenQuad);
     glBindVertexArray(Vaos.FullscreenQuad);
+
     CreateQuadVbo();
     glEnableVertexAttribArray(SlotPosition);
     glVertexAttribPointer(SlotPosition, 2, GL_SHORT, GL_FALSE, 2 * sizeof(short), 0);
-
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     Slabs.Velocity = CreateSlab(GridWidth, GridHeight, GridDepth, 3);
@@ -164,8 +161,7 @@ void PezInitialize()
     pezCheck(OpenGLError);
 }
 
-void PezRenderOpenGL()
-{
+void PezRenderOpenGL() {
     pezCheck(OpenGLError);
     PezConfig cfg = PezGetConfig();
 
@@ -208,10 +204,11 @@ void PezRenderOpenGL()
     glEnable(GL_BLEND);
     glBindVertexArray(Vaos.CubeCenter);
     glActiveTexture(GL_TEXTURE0);
-    if (BlurAndBrighten)
+    if (BlurAndBrighten) {
         glBindTexture(GL_TEXTURE_3D, Surfaces.BlurredDensity.ColorTexture);
-    else
+    } else {
         glBindTexture(GL_TEXTURE_3D, Slabs.Density.Ping.ColorTexture);
+    }
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_3D, Surfaces.LightCache.ColorTexture);
     glUseProgram(RaycastProgram);
@@ -235,8 +232,7 @@ void PezRenderOpenGL()
     pezCheck(OpenGLError);
 }
 
-void PezUpdate(float seconds)
-{
+void PezUpdate(float seconds) {
     pezCheck(OpenGLError);
     PezConfig cfg = PezGetConfig();
 
@@ -256,9 +252,13 @@ void PezUpdate(float seconds)
 
     float fips = 1.0f / dt;
     float alpha = 0.05f;
-    if (Fips < 0) Fips++;
-    else if (Fips == 0) Fips = fips;
-    else  Fips = fips * alpha + Fips * (1.0f - alpha);
+    if (Fips < 0) {
+        Fips++;
+    } else if(Fips == 0) {
+         Fips = fips;  
+    } else {
+        Fips = fips * alpha + Fips * (1.0f - alpha);
+    }
 
     if (SimulateFluid) {
         glBindVertexArray(Vaos.FullscreenQuad);
@@ -275,10 +275,12 @@ void PezUpdate(float seconds)
         ApplyImpulse(Slabs.Density.Ping, ImpulsePosition, ImpulseDensity);
         ComputeDivergence(Slabs.Velocity.Ping, Surfaces.Obstacles, Surfaces.Divergence);
         ClearSurface(Slabs.Pressure.Ping, 0);
+
         for (int i = 0; i < NumJacobiIterations; ++i) {
             Jacobi(Slabs.Pressure.Ping, Surfaces.Divergence, Surfaces.Obstacles, Slabs.Pressure.Pong);
             SwapSurfaces(&Slabs.Pressure);
         }
+        
         SubtractGradient(Slabs.Velocity.Ping, Slabs.Pressure.Ping, Surfaces.Obstacles, Slabs.Velocity.Pong);
         SwapSurfaces(&Slabs.Velocity);
     }
@@ -309,7 +311,7 @@ static void HandleErrorGLFW(int code, const char *errordesc) {
 }
 
 static void HandleKeyInputGLFW(GLFWwindow *window, int key, int scancode, int action, int modifierFlags) {
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
     if(action == GLFW_RELEASE) {
         switch(key) {
             case GLFW_KEY_ESCAPE:
@@ -329,7 +331,7 @@ static void HandleKeyInputGLFW(GLFWwindow *window, int key, int scancode, int ac
 }
 
 static void HandleMouseMoveGLFW(GLFWwindow *window, double px, double py) {
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
     ctx->MouseState.X = (float)px;
     ctx->MouseState.Y = (float)py;
     //printf("Mouse moved to %f x %f\n", px, py);
@@ -337,7 +339,7 @@ static void HandleMouseMoveGLFW(GLFWwindow *window, double px, double py) {
 }
 
 static void HandleMouseButtonInputGLFW(GLFWwindow *window, int button, int action, int modifiers) {
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
     //printf("Mouse button '%d' is %s at %f x %f\n", button, 
             //((action == GLFW_PRESS) ? "DOWN" : "UP"),
             //ctx->MouseState.X, ctx->MouseState.Y);
@@ -353,14 +355,14 @@ static void HandleMouseButtonInputGLFW(GLFWwindow *window, int button, int actio
 }
 
 static void HandleWindowResizeGLFW(GLFWwindow *window, int width, int height) {
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
     printf("Main window resized to %d x %d\n", width, height);
     ctx->WindowWasResized = true;
 }
 
 
 static void HandleCursorEnterGLFW(GLFWwindow *window, int entered) {
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
     if(entered) {
         printf("Mouse ENTERED!\n");
     } else {
@@ -370,7 +372,7 @@ static void HandleCursorEnterGLFW(GLFWwindow *window, int entered) {
 }
 
 static void InitRendererOpenGL(void) {
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
 
     // make the context "current"
     glfwMakeContextCurrent(ctx->MainWindow);
@@ -411,7 +413,7 @@ static void InitRendererOpenGL(void) {
 
 
 static void FinalizeFrameOpenGL(void) {
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
     glfwSwapBuffers(ctx->MainWindow);
 }
 
@@ -419,7 +421,7 @@ static void FinalizeFrameOpenGL(void) {
 int main(int argc, char *argv[]) {
     glfwSetErrorCallback(HandleErrorGLFW);
 
-    Context *ctx = &global_context;
+    context_t *ctx = &GlobalContext;
 
     if(!glfwInit()) {
         printf("Failed to initialize GLFW\n");
@@ -469,13 +471,14 @@ int main(int argc, char *argv[]) {
 
         glfwSetWindowSizeCallback(ctx->MainWindow, HandleWindowResizeGLFW);
 
-        Renderer renderer = {};
+        renderer_t renderer = {};
         if(ctx->RendererType == Renderer_OPENGL) {
-            renderer.Init = InitRendererOpenGL;
+            renderer.Initialize = InitRendererOpenGL;
             renderer.Update = PezUpdate;
-            renderer.Render = PezRenderOpenGL;
-            renderer.FinalizeFrame = FinalizeFrameOpenGL;
-        } else if (ctx->RendererType == Renderer_VULKAN) {
+            renderer.RenderFrame = PezRenderOpenGL;
+            renderer.FinishFrame = FinalizeFrameOpenGL;
+        } 
+        else if (ctx->RendererType == Renderer_VULKAN) {
             // TODO(BH): Vulkan renderer stuff...
             //renderer.Init = InitRendererVulkan;
             //renderer.Update = UpdateVulkan;
@@ -483,12 +486,13 @@ int main(int argc, char *argv[]) {
             //renderer.FinalizeFrame = FinalizeFrameVulkan;
             printf("ERROR: Vulkan renderer not yet implemented!\n");
             assert(false);
-        } else {
+        } 
+        else {
             printf("ERROR: Unknown renderer type '%d'\n", ctx->RendererType);
             assert(false);
         }
 
-        renderer.Init();
+        renderer.Initialize();
 
         double PrevTime = glfwGetTime();
         ctx->FrameStats.StartTime = PrevTime;
@@ -502,8 +506,8 @@ int main(int argc, char *argv[]) {
 
             renderer.Update((float)DeltaTime);
 
-            renderer.Render();
-            renderer.FinalizeFrame();
+            renderer.RenderFrame();
+            renderer.FinishFrame();
 
             if(++ctx->FrameStats.FrameCount > 100) {
                 ctx->FrameStats.FramesPerSecond = (float)ctx->FrameStats.FrameCount / (CurrentTime - ctx->FrameStats.StartTime);
