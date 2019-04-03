@@ -9,6 +9,7 @@ RelWithDebInfo
 ThirdParty/glew
 ThirdParty/glfw3
 ThirdParty/glfw
+.vscode/**
 
 
 

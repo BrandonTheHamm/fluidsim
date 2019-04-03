@@ -102,7 +102,7 @@ IF(WIN32)
   SET(PLATFORM_LIBRARIES shell32.lib user32.lib imm32.lib gdi32.lib winmm.lib opengl32.lib mincore.lib version.lib)
 elseif(UNIX AND NOT APPLE)
   SET(EXECUTABLE_FLAGS "")
-  SET(PLATFORM_LIBRARIES "")
+  SET(PLATFORM_LIBRARIES pthread dl X11 Xrandr Xxf86vm Xcursor Xinerama) # Xm Xmu Xmuu )
   add_definitions(-DVKFLUID_LINUX)
   # ADD_DEFINITIONS(-Wno-missing-field-initializers)
   # ADD_DEFINITIONS(-Wno-missing-braces)
@@ -184,6 +184,7 @@ target_link_libraries(${PROGRAM_NAME}
 	${GLFW3_LIBRARY}
 	${OPENGL_LIBRARY}
   ${GLEW_LIBRARY}
-	${Vulkan_LIBRARY}
+  ${Vulkan_LIBRARY}
+  ${PLATFORM_LIBRARIES}
 )
 
